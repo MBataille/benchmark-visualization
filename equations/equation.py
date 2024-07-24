@@ -59,7 +59,9 @@ class Equation:
     def set_initial_condition(self, initial_condition):
         self.initial_fields = initial_condition
         self.initialize_solver()
-        
+        # self.initial_fields = initial_condition
+        # self.solver.y = self.pack_fields(initial_condition)
+
     def set_intial_condition_zero(self):
         # ## change this
         # x = np.linspace(-5, 5, self.N)

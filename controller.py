@@ -1,7 +1,10 @@
 import time
-from PySide6.QtCore import QThread, Signal, QObject, Slot, Signal
+from PySide6.QtCore import QThread, Signal, QObject, Slot, Signal, QTimer
 from PySide6.QtWidgets import QWidget
 import numpy as np
+
+FPS = 30
+
 
 class EquationWorker(QObject):
     update_signal = Signal(object)
@@ -10,24 +13,29 @@ class EquationWorker(QObject):
         super().__init__()
         self.equation = equation
         self._running = False
+        self._initial_condition = None
     
     def start(self):
         self._running = True
         while self._running:
             # t0 = time.time()
+            if self._initial_condition is not None:
+                self.equation.set_initial_condition(self._initial_condition)
+                self._initial_condition = None
             self.equation.step()
             # print(f'took {(time.time() - t0)*1e3:.2f} ms')
             data = self.equation.get_current_state()
             t = self.equation.get_current_time()
             self.update_signal.emit((data, t))
-            # QThread.msleep(5)  # Sleep to control the update rate
+            # QThread.msleep(30)  # Sleep to control the update rate
     
     def stop(self):
         self._running = False
         
     @Slot(object)
     def change_intial_condition(self, initial_fields):
-        self.equation.set_initial_condition(initial_fields)
+        self._initial_condition = initial_fields
+        # self.equation.set_initial_condition(initial_fields)
         
         
 class Controller(QWidget):
@@ -37,9 +45,12 @@ class Controller(QWidget):
         super().__init__()
         self.equation = equation
         self.gui = gui
+        self.timer = QTimer()
         self.thread = None
         self.worker = None
-        
+        self.data = None
+        self.t = None
+
     def set_gui(self, gui):
         self.gui = gui
         
@@ -49,11 +60,14 @@ class Controller(QWidget):
         self.worker.moveToThread(self.thread)
         
         self.thread.started.connect(self.worker.start)
-        self.worker.update_signal.connect(self.gui.update_plot)
+        self.worker.update_signal.connect(self.update_data)
         self.sigInitCondChanged.connect(self.worker.change_intial_condition)
+        self.timer.timeout.connect(self.update_frame)
         self.thread.start()
+        self.timer.start(int(1e3 / FPS))
         
     def stop_thread(self):
+        self.timer.stop()
         if self.worker:
             self.worker.stop()
         if self.thread:
@@ -62,6 +76,11 @@ class Controller(QWidget):
         self.worker = None
         self.thread = None
         
+    def update_data(self, data_and_time):
+        self.data, self.t = data_and_time
+
+    def update_frame(self): 
+        self.gui.update_plot((self.data, self.t))
     # def update(self):
     #     # t0 = time.time()
     #     self.equation.step()
